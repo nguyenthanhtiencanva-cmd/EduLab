@@ -1,0 +1,40 @@
+<Window x:Class="EduLab.Server.Views.BroadcastDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Gửi Thông Báo Toàn Phòng Máy"
+        Height="230" Width="480"
+        WindowStartupLocation="CenterOwner"
+        Background="#1E293B"
+        Foreground="#F8FAFC"
+        FontFamily="Segoe UI, Arial"
+        ResizeMode="NoResize">
+
+    <Grid Padding="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0" Text="Nhập thông báo gửi tới tất cả 40 máy học sinh:"
+                   FontSize="13" FontWeight="SemiBold" Foreground="#38BDF8" Margin="0,0,0,10"/>
+
+        <TextBox Grid.Row="1" x:Name="TxtMessage" TextWrapping="Wrap" AcceptsReturn="True"
+                 Background="#0F172A" Foreground="#FFFFFF" BorderBrush="#475569"
+                 FontSize="13" Padding="8" Margin="0,0,0,15"
+                 Text="Còn 5 phút nữa là hết giờ làm bài, các em lưu bài và nộp lại cho thầy cô nhé!"/>
+
+        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right">
+            <Button Content="Hủy" Width="80" Height="32" Margin="0,0,10,0"
+                    Background="#334155" Foreground="#CBD5E1" BorderThickness="0" Cursor="Hand"
+                    Click="BtnCancel_Click">
+                <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="6"/></Style></Button.Resources>
+            </Button>
+            <Button Content="📢 Phát Thông Báo" Width="140" Height="32"
+                    Background="#0284C7" Foreground="#FFFFFF" FontWeight="Bold" BorderThickness="0" Cursor="Hand"
+                    Click="BtnSend_Click">
+                <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="6"/></Style></Button.Resources>
+            </Button>
+        </StackPanel>
+    </Grid>
+</Window>
