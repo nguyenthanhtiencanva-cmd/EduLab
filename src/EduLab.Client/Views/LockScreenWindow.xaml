@@ -33,8 +33,7 @@
                 <StackPanel Grid.Row="0" HorizontalAlignment="Center" Margin="0,0,0,15">
                     <TextBlock Text="HỆ THỐNG QUẢN LÝ PHÒNG TIN HỌC"
                                FontSize="14" FontWeight="SemiBold"
-                               Foreground="#38BDF8" HorizontalAlignment="Center"
-                               LetterSpacing="2"/>
+                               Foreground="#38BDF8" HorizontalAlignment="Center"/>
                     <TextBlock x:Name="TxtMachineName" Text="MÁY TRẠM"
                                FontSize="32" FontWeight="Bold"
                                Foreground="#FFFFFF" HorizontalAlignment="Center"
