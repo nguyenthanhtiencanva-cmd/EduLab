@@ -9,7 +9,7 @@
         FontFamily="Segoe UI, Arial"
         ResizeMode="NoResize">
 
-    <Grid Padding="20">
+    <Grid Margin="20">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
