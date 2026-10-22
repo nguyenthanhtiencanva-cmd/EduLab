@@ -48,34 +48,64 @@ namespace EduLab.Client.Services
             {
                 try
                 {
+                    string targetIp = GetConfiguredServerIp();
+
+                    // 1. Nếu đã có cấu hình IP thủ công, thử kết nối trực tiếp trước
+                    if (!string.IsNullOrWhiteSpace(targetIp))
+                    {
+                        OnStatusChanged?.Invoke($"Đang kết nối tới Máy Giáo Viên ({targetIp})...");
+                        try
+                        {
+                            _tcpClient = new TcpClient();
+                            var connectTask = _tcpClient.ConnectAsync(targetIp, NetworkConstants.COMMAND_PORT, ct).AsTask();
+                            var completed = await Task.WhenAny(connectTask, Task.Delay(3000, ct));
+                            if (completed == connectTask && _tcpClient.Connected)
+                            {
+                                ServerIp = targetIp;
+                                _stream = _tcpClient.GetStream();
+                                OnStatusChanged?.Invoke($"Đã kết nối tới Máy Giáo Viên ({ServerIp})!");
+
+                                await RegisterWithServerAsync(ct);
+                                var receiveTask = ReceiveCommandsLoopAsync(ct);
+                                var thumbnailTask = SendThumbnailLoopAsync(ct);
+                                await Task.WhenAny(receiveTask, thumbnailTask);
+                                continue;
+                            }
+                        }
+                        catch
+                        {
+                            CloseConnection();
+                        }
+                    }
+
+                    // 2. Tự động dò tìm IP máy giáo viên qua UDP Broadcast
                     OnStatusChanged?.Invoke("Đang dò tìm Máy Giáo Viên trên Wi-Fi...");
-                    
-                    // 1. Tự động dò tìm IP máy giáo viên qua UDP Broadcast
-                    var discovery = await DiscoveryBeacon.DiscoverServerAsync(4000, ct);
+                    var discovery = await DiscoveryBeacon.DiscoverServerAsync(3000, ct);
                     if (discovery == null)
                     {
-                        await Task.Delay(2000, ct);
+                        OnStatusChanged?.Invoke("Chưa tìm thấy Máy Giáo Viên (Bấm 'Cài đặt IP' để nhập thủ công)");
+                        await Task.Delay(3000, ct);
                         continue;
                     }
 
                     ServerIp = discovery.ServerIp;
                     OnStatusChanged?.Invoke($"Đã tìm thấy máy chủ ({ServerIp}). Đang kết nối...");
 
-                    // 2. Kết nối TCP tới máy giáo viên
+                    // 3. Kết nối TCP tới máy giáo viên
                     _tcpClient = new TcpClient();
                     await _tcpClient.ConnectAsync(ServerIp, discovery.CommandPort, ct);
                     _stream = _tcpClient.GetStream();
 
                     OnStatusChanged?.Invoke($"Đã kết nối tới Máy Giáo Viên ({ServerIp})!");
 
-                    // 3. Đăng ký thông tin máy trạm với máy chủ
+                    // 4. Đăng ký thông tin máy trạm với máy chủ
                     await RegisterWithServerAsync(ct);
 
-                    // 4. Khởi động 2 luồng: Lắng nghe lệnh từ thầy & Định kỳ gửi Thumbnail
-                    var receiveTask = ReceiveCommandsLoopAsync(ct);
-                    var thumbnailTask = SendThumbnailLoopAsync(ct);
+                    // 5. Khởi động 2 luồng: Lắng nghe lệnh từ thầy & Định kỳ gửi Thumbnail
+                    var recTask = ReceiveCommandsLoopAsync(ct);
+                    var thumbTask = SendThumbnailLoopAsync(ct);
 
-                    await Task.WhenAny(receiveTask, thumbnailTask);
+                    await Task.WhenAny(recTask, thumbTask);
                 }
                 catch (OperationCanceledException)
                 {
@@ -92,6 +122,32 @@ namespace EduLab.Client.Services
 
                 await Task.Delay(3000, ct);
             }
+        }
+
+        public void SetManualServerIp(string ip)
+        {
+            try
+            {
+                string configPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "server_ip.txt");
+                File.WriteAllText(configPath, ip.Trim());
+                CloseConnection(); // Buộc kết nối lại với IP mới
+            }
+            catch { }
+        }
+
+        private string GetConfiguredServerIp()
+        {
+            try
+            {
+                string configPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "server_ip.txt");
+                if (File.Exists(configPath))
+                {
+                    string ip = File.ReadAllText(configPath).Trim();
+                    if (!string.IsNullOrWhiteSpace(ip)) return ip;
+                }
+            }
+            catch { }
+            return string.Empty;
         }
 
         private async Task RegisterWithServerAsync(CancellationToken ct)
@@ -265,7 +321,11 @@ namespace EduLab.Client.Services
 
         public async Task CheckInAsync(string studentName, string studentId, string className)
         {
-            if (_stream == null) return;
+            if (_stream == null || _tcpClient == null || !_tcpClient.Connected)
+            {
+                throw new InvalidOperationException("Máy trạm CHƯA KẾT NỐI tới Máy Giáo Viên! Vui lòng kiểm tra sóng Wi-Fi hoặc bấm '⚙️ Cài đặt IP' để nhập IP máy giáo viên.");
+            }
+
             var info = new ClientInfo
             {
                 MachineName = MachineName,

@@ -24,7 +24,9 @@
                     <Border Background="#334155" CornerRadius="6" Padding="6,2" VerticalAlignment="Center" Margin="0,0,15,0">
                         <TextBlock Text="PHÒNG TIN HỌC" FontSize="11" FontWeight="SemiBold" Foreground="#94A3B8"/>
                     </Border>
-                    <TextBlock Text="Máy Giáo Viên • Windows 11" FontSize="13" Foreground="#64748B" VerticalAlignment="Center"/>
+                    <Border Background="#0284C7" CornerRadius="6" Padding="8,4" VerticalAlignment="Center">
+                        <TextBlock Text="{Binding ServerIpDisplay}" FontSize="12" FontWeight="Bold" Foreground="#FFFFFF"/>
+                    </Border>
                 </StackPanel>
 
                 <!-- Statistics Badges -->

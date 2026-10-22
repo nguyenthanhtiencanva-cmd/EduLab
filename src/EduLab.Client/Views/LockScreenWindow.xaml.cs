@@ -129,6 +129,12 @@ namespace EduLab.Client.Views
                 return;
             }
 
+            if (!ClientNetworkManager.Instance.IsConnected)
+            {
+                MessageBox.Show("Máy trạm CHƯA KẾT NỐI được tới Máy Giáo Viên!\n\nVui lòng kiểm tra lại mạng Wi-Fi hoặc bấm vào nút '⚙️ Cài đặt IP' ở góc dưới để nhập địa chỉ IP của Máy Giáo Viên.", "Chưa kết nối máy chủ", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
             BtnCheckIn.IsEnabled = false;
             BtnCheckIn.Content = "Đang gửi báo danh...";
 
@@ -146,6 +152,65 @@ namespace EduLab.Client.Views
                 BtnCheckIn.IsEnabled = true;
                 BtnCheckIn.Content = "Báo Danh Vào Tiết Học";
             }
+        }
+
+        private void BtnConfigIp_Click(object sender, RoutedEventArgs e)
+        {
+            // Hộp thoại nhập IP máy giáo viên
+            var ipDialog = new Window
+            {
+                Title = "Cấu Hình IP Máy Giáo Viên",
+                Width = 380,
+                Height = 180,
+                WindowStartupLocation = WindowStartupLocation.CenterScreen,
+                Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0x1E, 0x29, 0x3B)),
+                Foreground = System.Windows.Media.Brushes.White,
+                Topmost = true,
+                ResizeMode = ResizeMode.NoResize
+            };
+
+            var sp = new System.Windows.Controls.StackPanel { Margin = new Thickness(20) };
+            sp.Children.Add(new System.Windows.Controls.TextBlock
+            {
+                Text = "Nhập địa chỉ IP của Máy Giáo Viên (ví dụ: 192.168.1.15):",
+                FontSize = 12,
+                Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0x38, 0xBD, 0xF8)),
+                Margin = new Thickness(0, 0, 0, 8)
+            });
+
+            var txtIp = new System.Windows.Controls.TextBox
+            {
+                Height = 32,
+                FontSize = 14,
+                Text = ClientNetworkManager.Instance.ServerIp,
+                Padding = new Thickness(6, 4, 6, 4)
+            };
+            sp.Children.Add(txtIp);
+
+            var btnSave = new System.Windows.Controls.Button
+            {
+                Content = "Lưu & Kết Nối Ngay",
+                Height = 32,
+                Margin = new Thickness(0, 12, 0, 0),
+                Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0x02, 0x84, 0xC7)),
+                Foreground = System.Windows.Media.Brushes.White,
+                FontWeight = FontWeights.Bold,
+                BorderThickness = new Thickness(0)
+            };
+            btnSave.Click += (s, ev) =>
+            {
+                string ip = txtIp.Text.Trim();
+                if (!string.IsNullOrWhiteSpace(ip))
+                {
+                    ClientNetworkManager.Instance.SetManualServerIp(ip);
+                    ipDialog.Close();
+                    MessageBox.Show($"Đã lưu IP máy giáo viên: {ip}\nĐang thử kết nối lại...", "Thông báo", MessageBoxButton.OK, MessageBoxImage.Information);
+                }
+            };
+            sp.Children.Add(btnSave);
+
+            ipDialog.Content = sp;
+            ipDialog.ShowDialog();
         }
 
         public void ForceExit()

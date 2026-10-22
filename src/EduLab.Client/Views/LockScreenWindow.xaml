@@ -91,8 +91,13 @@
 
                 <!-- Footer status -->
                 <DockPanel Grid.Row="3" Margin="0,20,0,0">
-                    <TextBlock x:Name="TxtNetworkStatus" Text="Trạng thái mạng: Đang kết nối..."
-                               FontSize="12" Foreground="#64748B" VerticalAlignment="Center"/>
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <TextBlock x:Name="TxtNetworkStatus" Text="Trạng thái mạng: Đang kết nối..."
+                                   FontSize="12" Foreground="#64748B" VerticalAlignment="Center"/>
+                        <Button Content="⚙️ Cài đặt IP" FontSize="11" Foreground="#38BDF8"
+                                Background="Transparent" BorderThickness="0" Cursor="Hand"
+                                Margin="12,0,0,0" VerticalAlignment="Center" Click="BtnConfigIp_Click"/>
+                    </StackPanel>
                     <TextBlock Text="EduLab v1.0 • Windows 11"
                                FontSize="12" Foreground="#475569" HorizontalAlignment="Right" VerticalAlignment="Center"/>
                 </DockPanel>

@@ -146,7 +146,7 @@ namespace EduLab.Server.Services
                                 clientInfo.StudentName = checkIn.StudentName;
                                 clientInfo.StudentId = checkIn.StudentId;
                                 clientInfo.ClassName = checkIn.ClassName;
-                                clientInfo.Status = ClientStatus.InUse;
+                                clientInfo.Status = clientInfo.IsScreenLocked ? ClientStatus.Locked : ClientStatus.InUse;
                                 OnClientUpdated?.Invoke(clientInfo);
                             }
                             break;
