@@ -13,16 +13,10 @@ namespace EduLab.Shared.Utils
         private static extern IntPtr GetDesktopWindow();
 
         [DllImport("user32.dll")]
-        private static extern IntPtr GetWindowDC(IntPtr hWnd);
+        private static extern int GetSystemMetrics(int nIndex);
 
-        [DllImport("user32.dll")]
-        private static extern IntPtr ReleaseDC(IntPtr hWnd, IntPtr hDC);
-
-        [DllImport("gdi32.dll")]
-        private static extern bool BitBlt(IntPtr hObject, int nXDest, int nYDest, int nWidth,
-            int nHeight, IntPtr hObjectSource, int nXSrc, int nYSrc, int dwRop);
-
-        private const int SRCCOPY = 0x00CC0020;
+        private const int SM_CXSCREEN = 0;
+        private const int SM_CYSCREEN = 1;
 
         /// <summary>
         /// Chụp màn hình và nén thành byte array JPEG kích thước thu nhỏ (Thumbnail) tối ưu cho Wi-Fi
@@ -34,20 +28,12 @@ namespace EduLab.Shared.Utils
         {
             try
             {
-                // Lấy kích thước toàn màn hình chính
-                int screenWidth = 1920;
-                int screenHeight = 1080;
-                
-                try
-                {
-                    // Khi chạy trên Windows Desktop
-                    screenWidth = System.Windows.Forms.Screen.PrimaryScreen?.Bounds.Width ?? 1920;
-                    screenHeight = System.Windows.Forms.Screen.PrimaryScreen?.Bounds.Height ?? 1080;
-                }
-                catch
-                {
-                    // Fallback
-                }
+                // Lấy kích thước màn hình chính qua Win32 API
+                int screenWidth = GetSystemMetrics(SM_CXSCREEN);
+                int screenHeight = GetSystemMetrics(SM_CYSCREEN);
+
+                if (screenWidth <= 0) screenWidth = 1920;
+                if (screenHeight <= 0) screenHeight = 1080;
 
                 using var fullBmp = new Bitmap(screenWidth, screenHeight, PixelFormat.Format24bppRgb);
                 using (var g = Graphics.FromImage(fullBmp))
