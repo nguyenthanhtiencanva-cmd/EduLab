@@ -6,55 +6,59 @@
         WindowState="Maximized"
         Topmost="True"
         ShowInTaskbar="False"
-        Background="#0F172A"
+        Background="#0B0F19"
         Foreground="#F8FAFC"
         FontFamily="Segoe UI, Arial"
         ResizeMode="NoResize">
-    
+
     <Grid>
-        <!-- Background subtle glow decoration -->
+        <!-- Center Floating Card -->
         <Border HorizontalAlignment="Center" VerticalAlignment="Center"
-                Width="800" Height="500" CornerRadius="20"
-                Background="#1E293B" Padding="40"
+                Width="680" CornerRadius="16"
+                Background="#1E293B" Padding="35"
                 BorderBrush="#334155" BorderThickness="1.5">
             <Border.Effect>
-                <DropShadowEffect Color="#000000" BlurRadius="40" ShadowDepth="10" Opacity="0.6"/>
+                <DropShadowEffect Color="#000000" BlurRadius="35" ShadowDepth="10" Opacity="0.6"/>
             </Border.Effect>
 
             <Grid>
                 <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="*"/>
-                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/> <!-- Title & Machine Name -->
+                    <RowDefinition Height="Auto"/> <!-- Status Lock Badge -->
+                    <RowDefinition Height="Auto"/> <!-- Subtitle Instruction -->
+                    <RowDefinition Height="*"/>    <!-- Check-in Form -->
+                    <RowDefinition Height="Auto"/> <!-- Network & IP Status -->
                 </Grid.RowDefinitions>
 
-                <!-- Header -->
-                <StackPanel Grid.Row="0" HorizontalAlignment="Center" Margin="0,0,0,15">
-                    <TextBlock Text="HỆ THỐNG QUẢN LÝ PHÒNG TIN HỌC"
-                               FontSize="14" FontWeight="SemiBold"
+                <!-- 1. Header -->
+                <StackPanel Grid.Row="0" HorizontalAlignment="Center" Margin="0,0,0,10">
+                    <TextBlock Text="PHÒNG THỰC HÀNH TIN HỌC"
+                               FontSize="13" FontWeight="Bold"
                                Foreground="#38BDF8" HorizontalAlignment="Center"/>
                     <TextBlock x:Name="TxtMachineName" Text="MÁY TRẠM"
-                               FontSize="32" FontWeight="Bold"
+                               FontSize="30" FontWeight="Bold"
                                Foreground="#FFFFFF" HorizontalAlignment="Center"
-                               Margin="0,5,0,5"/>
-                    <Border Background="#EF4444" CornerRadius="12" Padding="12,4" HorizontalAlignment="Center">
-                        <TextBlock x:Name="TxtLockStatus" Text="MÀN HÌNH ĐANG KHÓA"
-                                   FontSize="12" FontWeight="Bold" Foreground="#FFFFFF"/>
-                    </Border>
+                               Margin="0,4,0,4"/>
                 </StackPanel>
 
-                <!-- Notice -->
-                <TextBlock Grid.Row="1" Text="Vui lòng nhập thông tin học sinh để điểm danh hoặc chờ thầy cô mở khóa máy."
-                           FontSize="13" Foreground="#94A3B8"
-                           HorizontalAlignment="Center" Margin="0,0,0,25" TextWrapping="Wrap"/>
+                <!-- 2. Status Badge -->
+                <Border Grid.Row="1" Background="#7F1D1D" CornerRadius="6" Padding="12,4"
+                        HorizontalAlignment="Center" Margin="0,0,0,15" BorderBrush="#DC2626" BorderThickness="1">
+                    <TextBlock x:Name="TxtLockStatus" Text="🔒 MÀN HÌNH ĐANG KHÓA"
+                               FontSize="12" FontWeight="Bold" Foreground="#FCA5A5"/>
+                </Border>
 
-                <!-- Check-in Form -->
-                <StackPanel Grid.Row="2" Width="400" HorizontalAlignment="Center">
-                    <TextBlock Text="Họ và tên học sinh:" FontSize="13" Foreground="#CBD5E1" Margin="0,0,0,5"/>
-                    <TextBox x:Name="TxtStudentName" Height="38" FontSize="14"
+                <!-- 3. Subtitle -->
+                <TextBlock Grid.Row="2" Text="Các em vui lòng nhập họ tên để điểm danh. Khi thầy cô bắt đầu tiết học, máy sẽ tự động mở khóa."
+                           FontSize="13" Foreground="#94A3B8" TextAlignment="Center"
+                           HorizontalAlignment="Center" Margin="0,0,0,20" TextWrapping="Wrap"/>
+
+                <!-- 4. Check-in Form -->
+                <StackPanel Grid.Row="3" Width="440" HorizontalAlignment="Center">
+                    <TextBlock Text="Họ và tên học sinh:" FontSize="13" FontWeight="SemiBold" Foreground="#E2E8F0" Margin="0,0,0,6"/>
+                    <TextBox x:Name="TxtStudentName" Height="40" FontSize="14"
                              Background="#0F172A" Foreground="#FFFFFF" BorderBrush="#475569"
-                             Padding="10,8" VerticalContentAlignment="Center" Margin="0,0,0,12"/>
+                             Padding="10,0" VerticalContentAlignment="Center" Margin="0,0,0,14"/>
 
                     <Grid Margin="0,0,0,20">
                         <Grid.ColumnDefinitions>
@@ -64,21 +68,21 @@
                         </Grid.ColumnDefinitions>
 
                         <StackPanel Grid.Column="0">
-                            <TextBlock Text="Mã số học sinh:" FontSize="13" Foreground="#CBD5E1" Margin="0,0,0,5"/>
-                            <TextBox x:Name="TxtStudentId" Height="38" FontSize="14"
+                            <TextBlock Text="Lớp học:" FontSize="13" FontWeight="SemiBold" Foreground="#E2E8F0" Margin="0,0,0,6"/>
+                            <TextBox x:Name="TxtClassName" Height="40" FontSize="14"
                                      Background="#0F172A" Foreground="#FFFFFF" BorderBrush="#475569"
-                                     Padding="10,8" VerticalContentAlignment="Center"/>
+                                     Padding="10,0" VerticalContentAlignment="Center"/>
                         </StackPanel>
 
                         <StackPanel Grid.Column="2">
-                            <TextBlock Text="Lớp:" FontSize="13" Foreground="#CBD5E1" Margin="0,0,0,5"/>
-                            <TextBox x:Name="TxtClassName" Height="38" FontSize="14"
+                            <TextBlock Text="Mã số HS (nếu có):" FontSize="13" FontWeight="SemiBold" Foreground="#94A3B8" Margin="0,0,0,6"/>
+                            <TextBox x:Name="TxtStudentId" Height="40" FontSize="14"
                                      Background="#0F172A" Foreground="#FFFFFF" BorderBrush="#475569"
-                                     Padding="10,8" VerticalContentAlignment="Center"/>
+                                     Padding="10,0" VerticalContentAlignment="Center"/>
                         </StackPanel>
                     </Grid>
 
-                    <Button x:Name="BtnCheckIn" Content="Báo Danh Vào Tiết Học" Height="42"
+                    <Button x:Name="BtnCheckIn" Content="Báo Danh Vào Tiết Học" Height="44"
                             Background="#0284C7" Foreground="#FFFFFF" FontSize="14" FontWeight="Bold"
                             BorderThickness="0" Cursor="Hand" Click="BtnCheckIn_Click">
                         <Button.Resources>
@@ -89,18 +93,20 @@
                     </Button>
                 </StackPanel>
 
-                <!-- Footer status -->
-                <DockPanel Grid.Row="3" Margin="0,20,0,0">
-                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                        <TextBlock x:Name="TxtNetworkStatus" Text="Trạng thái mạng: Đang kết nối..."
-                                   FontSize="12" Foreground="#64748B" VerticalAlignment="Center"/>
-                        <Button Content="⚙️ Cài đặt IP" FontSize="11" Foreground="#38BDF8"
-                                Background="Transparent" BorderThickness="0" Cursor="Hand"
-                                Margin="12,0,0,0" VerticalAlignment="Center" Click="BtnConfigIp_Click"/>
-                    </StackPanel>
-                    <TextBlock Text="EduLab v1.0 • Windows 11"
-                               FontSize="12" Foreground="#475569" HorizontalAlignment="Right" VerticalAlignment="Center"/>
-                </DockPanel>
+                <!-- 5. Footer Connection Status & Manual IP Config -->
+                <Border Grid.Row="4" Margin="0,25,0,0" Padding="0,12,0,0" BorderBrush="#334155" BorderThickness="0,1,0,0">
+                    <DockPanel>
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock x:Name="TxtNetworkStatus" Text="Đang kết nối Máy Giáo Viên..."
+                                       FontSize="12" Foreground="#38BDF8" VerticalAlignment="Center"/>
+                            <Button Content="⚙️ Cài đặt IP" FontSize="11" FontWeight="Bold" Foreground="#38BDF8"
+                                    Background="Transparent" BorderThickness="0" Cursor="Hand"
+                                    Margin="12,0,0,0" VerticalAlignment="Center" Click="BtnConfigIp_Click"/>
+                        </StackPanel>
+                        <TextBlock Text="EduLab v2.0 Client"
+                                   FontSize="11" Foreground="#64748B" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                    </DockPanel>
+                </Border>
             </Grid>
         </Border>
     </Grid>

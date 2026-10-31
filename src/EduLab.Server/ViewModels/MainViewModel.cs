@@ -3,7 +3,9 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Linq;
 using System.Runtime.CompilerServices;
+using System.Text.RegularExpressions;
 using System.Windows;
+using System.Windows.Data;
 using EduLab.Server.Services;
 using EduLab.Shared.Enums;
 using EduLab.Shared.Models;
@@ -12,13 +14,17 @@ namespace EduLab.Server.ViewModels
 {
     public class MainViewModel : INotifyPropertyChanged
     {
-        public ObservableCollection<ClientItemViewModel> Machines { get; } = new();
+        public ObservableCollection<ClientItemViewModel> AllMachines { get; } = new();
+        private ICollectionView _filteredMachinesView;
+        public ICollectionView Machines => _filteredMachinesView;
 
         private int _totalCount = 40;
         private int _onlineCount = 0;
         private int _lockedCount = 0;
         private int _inUseCount = 0;
-        private string _statusNotification = "Hệ thống EduLab Server đang hoạt động trên cổng 8888.";
+        private int _checkedInCount = 0;
+        private string _statusNotification = "Hệ thống EduLab Server đã sẵn sàng điều khiển phòng máy.";
+        private string _selectedFilter = "ALL"; // ALL, ONLINE, INUSE, LOCKED, OFFLINE
 
         public int TotalCount
         {
@@ -44,13 +50,33 @@ namespace EduLab.Server.ViewModels
             set { _inUseCount = value; OnPropertyChanged(); }
         }
 
+        public int CheckedInCount
+        {
+            get => _checkedInCount;
+            set { _checkedInCount = value; OnPropertyChanged(); }
+        }
+
         public string StatusNotification
         {
             get => _statusNotification;
             set { _statusNotification = value; OnPropertyChanged(); }
         }
 
-        public string ServerIpDisplay { get; set; } = $"IP: {GetServerLocalIp()} (Cổng 8888)";
+        public string SelectedFilter
+        {
+            get => _selectedFilter;
+            set
+            {
+                if (_selectedFilter != value)
+                {
+                    _selectedFilter = value;
+                    OnPropertyChanged();
+                    _filteredMachinesView.Refresh();
+                }
+            }
+        }
+
+        public string ServerIpDisplay { get; set; } = $"IP Giáo Viên: {GetServerLocalIp()} (Cổng: 8888)";
 
         private static string GetServerLocalIp()
         {
@@ -69,17 +95,20 @@ namespace EduLab.Server.ViewModels
 
         public MainViewModel()
         {
-            // Khởi tạo sơ đồ 40 máy chuẩn cho phòng tin
+            // Khởi tạo trước sơ đồ 40 máy phòng máy
             for (int i = 1; i <= 40; i++)
             {
                 string num = i.ToString("D2");
-                Machines.Add(new ClientItemViewModel
+                AllMachines.Add(new ClientItemViewModel
                 {
                     MachineName = $"MAY-{num}",
                     DisplayName = $"Máy {num}",
                     Status = ClientStatus.Offline
                 });
             }
+
+            _filteredMachinesView = CollectionViewSource.GetDefaultView(AllMachines);
+            _filteredMachinesView.Filter = FilterPredicate;
 
             // Đăng ký nhận sự kiện từ dịch vụ mạng
             ServerNetworkManager.Instance.OnClientConnected += HandleClientConnected;
@@ -91,37 +120,66 @@ namespace EduLab.Server.ViewModels
             UpdateCounters();
         }
 
-        private ClientItemViewModel? FindSlot(string machineName)
+        private bool FilterPredicate(object obj)
         {
-            // Khớp theo tên chuẩn MAY-01 hoặc máy đầu tiên đang offline
-            var exact = Machines.FirstOrDefault(m => string.Equals(m.MachineName, machineName, StringComparison.OrdinalIgnoreCase));
+            if (obj is not ClientItemViewModel item) return false;
+
+            return _selectedFilter switch
+            {
+                "ONLINE" => item.IsOnline,
+                "INUSE" => item.Status == ClientStatus.InUse || item.HasStudent,
+                "LOCKED" => item.Status == ClientStatus.Locked,
+                "OFFLINE" => !item.IsOnline,
+                _ => true
+            };
+        }
+
+        public ClientItemViewModel? FindSlot(string machineName, string? ipAddress = null)
+        {
+            if (string.IsNullOrWhiteSpace(machineName)) return null;
+
+            // 1. Khớp chính xác theo MachineName
+            var exact = AllMachines.FirstOrDefault(m => string.Equals(m.MachineName, machineName, StringComparison.OrdinalIgnoreCase));
             if (exact != null) return exact;
 
-            // Tìm máy theo số thứ tự nếu tên máy chứa số
-            var matchNumber = System.Text.RegularExpressions.Regex.Match(machineName, @"\d+");
-            if (matchNumber.Success && int.TryParse(matchNumber.Value, out int idx) && idx >= 1 && idx <= 40)
+            // 2. Khớp theo số máy (Ví dụ: MAY-05, PC05, DESKTOP-5 -> Máy 05)
+            var matchNumber = Regex.Match(machineName, @"\d+");
+            if (matchNumber.Success && int.TryParse(matchNumber.Value, out int idx) && idx >= 1 && idx <= AllMachines.Count)
             {
-                return Machines[idx - 1];
+                return AllMachines[idx - 1];
             }
 
-            return Machines.FirstOrDefault(m => !m.IsOnline);
+            // 3. Khớp theo địa chỉ IP nếu có
+            if (!string.IsNullOrWhiteSpace(ipAddress))
+            {
+                var byIp = AllMachines.FirstOrDefault(m => string.Equals(m.IpAddress, ipAddress, StringComparison.OrdinalIgnoreCase));
+                if (byIp != null) return byIp;
+            }
+
+            // 4. Nếu không khớp số, gán vào máy đầu tiên đang Offline chưa có IP
+            return AllMachines.FirstOrDefault(m => !m.IsOnline && string.IsNullOrEmpty(m.IpAddress));
         }
 
         private void HandleClientConnected(ClientInfo info)
         {
             Application.Current?.Dispatcher.Invoke(() =>
             {
-                var slot = FindSlot(info.MachineName);
+                var slot = FindSlot(info.MachineName, info.IpAddress);
                 if (slot != null)
                 {
                     slot.MachineName = info.MachineName;
                     slot.IpAddress = info.IpAddress;
                     slot.MacAddress = info.MacAddress;
-                    slot.Status = ClientStatus.Locked;
-                    slot.StudentName = info.StudentName;
-                    slot.ClassName = info.ClassName;
+                    slot.Status = info.IsScreenLocked ? ClientStatus.Locked : ClientStatus.InUse;
+                    if (!string.IsNullOrWhiteSpace(info.StudentName))
+                    {
+                        slot.StudentName = info.StudentName;
+                        slot.ClassName = info.ClassName;
+                        slot.StudentId = info.StudentId;
+                    }
+                    slot.LastActive = DateTime.UtcNow;
                 }
-                StatusNotification = $"Máy [{info.MachineName}] vừa kết nối (IP: {info.IpAddress}).";
+                StatusNotification = $"Máy [{info.MachineName}] đã kết nối (IP: {info.IpAddress})";
                 UpdateCounters();
             });
         }
@@ -130,12 +188,12 @@ namespace EduLab.Server.ViewModels
         {
             Application.Current?.Dispatcher.Invoke(() =>
             {
-                var slot = Machines.FirstOrDefault(m => string.Equals(m.MachineName, machineName, StringComparison.OrdinalIgnoreCase));
+                var slot = AllMachines.FirstOrDefault(m => string.Equals(m.MachineName, machineName, StringComparison.OrdinalIgnoreCase));
                 if (slot != null)
                 {
                     slot.Status = ClientStatus.Offline;
                 }
-                StatusNotification = $"Máy [{machineName}] đã ngắt kết nối.";
+                StatusNotification = $"Máy [{machineName}] vừa ngắt kết nối.";
                 UpdateCounters();
             });
         }
@@ -144,14 +202,20 @@ namespace EduLab.Server.ViewModels
         {
             Application.Current?.Dispatcher.Invoke(() =>
             {
-                var slot = FindSlot(info.MachineName);
+                var slot = FindSlot(info.MachineName, info.IpAddress);
                 if (slot != null)
                 {
-                    slot.StudentName = info.StudentName;
-                    slot.ClassName = info.ClassName;
+                    if (!string.IsNullOrWhiteSpace(info.StudentName))
+                    {
+                        slot.StudentName = info.StudentName;
+                        slot.ClassName = info.ClassName;
+                        slot.StudentId = info.StudentId;
+                    }
                     slot.Status = info.Status;
+                    slot.LastActive = DateTime.UtcNow;
+
+                    StatusNotification = $"Học sinh [{slot.StudentName}] ({slot.ClassName}) đã báo danh tại {slot.DisplayName}!";
                 }
-                StatusNotification = $"Học sinh [{info.StudentName}] ({info.ClassName}) vừa báo danh tại máy {slot?.DisplayName ?? info.MachineName}";
                 UpdateCounters();
             });
         }
@@ -164,6 +228,7 @@ namespace EduLab.Server.ViewModels
                 if (slot != null)
                 {
                     slot.UpdateThumbnailFromBytes(thumbBytes);
+                    slot.LastActive = DateTime.UtcNow;
                 }
             });
         }
@@ -178,9 +243,10 @@ namespace EduLab.Server.ViewModels
 
         public void UpdateCounters()
         {
-            OnlineCount = Machines.Count(m => m.IsOnline);
-            LockedCount = Machines.Count(m => m.Status == ClientStatus.Locked);
-            InUseCount = Machines.Count(m => m.Status == ClientStatus.InUse);
+            OnlineCount = AllMachines.Count(m => m.IsOnline);
+            LockedCount = AllMachines.Count(m => m.Status == ClientStatus.Locked);
+            InUseCount = AllMachines.Count(m => m.Status == ClientStatus.InUse);
+            CheckedInCount = AllMachines.Count(m => m.HasStudent);
         }
 
         public event PropertyChangedEventHandler? PropertyChanged;

@@ -42,7 +42,11 @@ namespace EduLab.Server.Services
         public void Start()
         {
             _cts = new CancellationTokenSource();
-            Directory.CreateDirectory(SubmissionsDirectory);
+            try
+            {
+                Directory.CreateDirectory(SubmissionsDirectory);
+            }
+            catch { }
 
             // 1. Chạy dịch vụ phát hiện máy chủ Wi-Fi (UDP Beacon)
             Task.Run(() => DiscoveryBeacon.RunServerBeaconAsync("EduLab Server", NetworkConstants.COMMAND_PORT, _cts.Token));
@@ -99,6 +103,9 @@ namespace EduLab.Server.Services
             {
                 var stream = socket.GetStream();
 
+                // Lấy IP của máy kết nối
+                string clientIp = (socket.Client.RemoteEndPoint as IPEndPoint)?.Address.ToString() ?? "127.0.0.1";
+
                 // Chờ gói tin đăng ký ban đầu từ máy trạm
                 var firstPacket = await PacketFraming.ReadPacketAsync(stream, ct);
                 if (firstPacket == null || firstPacket.Command != CommandType.RegisterClient)
@@ -110,10 +117,11 @@ namespace EduLab.Server.Services
                 var clientInfo = firstPacket.GetPayloadAs<ClientInfo>() ?? new ClientInfo();
                 machineName = string.IsNullOrWhiteSpace(clientInfo.MachineName) ? $"MAY-{Guid.NewGuid().ToString().Substring(0, 4)}" : clientInfo.MachineName;
                 clientInfo.MachineName = machineName;
+                if (string.IsNullOrWhiteSpace(clientInfo.IpAddress)) clientInfo.IpAddress = clientIp;
                 clientInfo.Status = ClientStatus.Locked;
                 clientInfo.LastSeen = DateTime.UtcNow;
 
-                // Nếu máy này đã kết nối trước đó (reconnect), dọn dẹp kết nối cũ
+                // Nếu máy này đã kết nối trước đó, thay thế phiên cũ
                 if (_clients.TryRemove(machineName, out var oldClient))
                 {
                     oldClient.Dispose();
@@ -122,9 +130,13 @@ namespace EduLab.Server.Services
                 clientWrapper = new ConnectedClient(socket, clientInfo);
                 _clients[machineName] = clientWrapper;
 
+                // Gửi xác nhận đăng ký thành công cho Client
+                var regAck = new NetworkPacket(CommandType.ClientRegistered, "OK");
+                await clientWrapper.SendPacketAsync(regAck, ct);
+
                 OnClientConnected?.Invoke(clientInfo);
 
-                // Lặp đọc dữ liệu từ máy trạm
+                // Vòng lặp đọc dữ liệu liên tục từ máy trạm
                 while (!ct.IsCancellationRequested && socket.Connected)
                 {
                     var packet = await PacketFraming.ReadPacketAsync(stream, ct);
@@ -134,6 +146,11 @@ namespace EduLab.Server.Services
 
                     switch (packet.Command)
                     {
+                        case CommandType.Ping:
+                            var pong = new NetworkPacket(CommandType.Pong, Array.Empty<byte>());
+                            await clientWrapper.SendPacketAsync(pong, ct);
+                            break;
+
                         case CommandType.ThumbnailData:
                             clientInfo.LatestThumbnail = packet.Payload;
                             OnThumbnailReceived?.Invoke(machineName, packet.Payload);
@@ -147,6 +164,11 @@ namespace EduLab.Server.Services
                                 clientInfo.StudentId = checkIn.StudentId;
                                 clientInfo.ClassName = checkIn.ClassName;
                                 clientInfo.Status = clientInfo.IsScreenLocked ? ClientStatus.Locked : ClientStatus.InUse;
+
+                                // Gửi thông báo xác nhận ngược về Client
+                                var ackPacket = new NetworkPacket(CommandType.BroadcastMessage, $"Giáo viên đã nhận báo danh của: {checkIn.StudentName} ({checkIn.ClassName})");
+                                await clientWrapper.SendPacketAsync(ackPacket, ct);
+
                                 OnClientUpdated?.Invoke(clientInfo);
                             }
                             break;
@@ -156,7 +178,7 @@ namespace EduLab.Server.Services
                             if (meta != null)
                             {
                                 _submissionMeta[meta.TransferId] = meta;
-                                string classFolder = string.IsNullOrWhiteSpace(meta.ClassName) ? "Chung" : meta.ClassName;
+                                string classFolder = string.IsNullOrWhiteSpace(meta.ClassName) ? "Lop_Chung" : meta.ClassName;
                                 string classPath = Path.Combine(SubmissionsDirectory, classFolder);
                                 Directory.CreateDirectory(classPath);
 
@@ -222,12 +244,22 @@ namespace EduLab.Server.Services
         public async Task LockAllAsync()
         {
             var packet = new NetworkPacket(CommandType.LockScreen, Array.Empty<byte>());
+            foreach (var c in _clients.Values)
+            {
+                c.Info.Status = ClientStatus.Locked;
+                c.Info.IsScreenLocked = true;
+            }
             await BroadcastPacketAsync(packet);
         }
 
         public async Task UnlockAllAsync()
         {
             var packet = new NetworkPacket(CommandType.UnlockScreen, Array.Empty<byte>());
+            foreach (var c in _clients.Values)
+            {
+                c.Info.Status = ClientStatus.InUse;
+                c.Info.IsScreenLocked = false;
+            }
             await BroadcastPacketAsync(packet);
         }
 

@@ -19,6 +19,7 @@ namespace EduLab.Client.Services
         private TcpClient? _tcpClient;
         private NetworkStream? _stream;
         private CancellationTokenSource? _cts;
+        private readonly SemaphoreSlim _sendLock = new(1, 1);
 
         public event Action? OnLocked;
         public event Action? OnUnlocked;
@@ -50,7 +51,7 @@ namespace EduLab.Client.Services
                 {
                     string targetIp = GetConfiguredServerIp();
 
-                    // 1. Nếu đã có cấu hình IP thủ công, thử kết nối trực tiếp trước
+                    // 1. Nếu có IP được lưu thủ công, ưu tiên kết nối trực tiếp
                     if (!string.IsNullOrWhiteSpace(targetIp))
                     {
                         OnStatusChanged?.Invoke($"Đang kết nối tới Máy Giáo Viên ({targetIp})...");
@@ -63,12 +64,15 @@ namespace EduLab.Client.Services
                             {
                                 ServerIp = targetIp;
                                 _stream = _tcpClient.GetStream();
-                                OnStatusChanged?.Invoke($"Đã kết nối tới Máy Giáo Viên ({ServerIp})!");
+                                OnStatusChanged?.Invoke($"Đã kết nối Máy Giáo Viên ({ServerIp})");
 
                                 await RegisterWithServerAsync(ct);
+
                                 var receiveTask = ReceiveCommandsLoopAsync(ct);
                                 var thumbnailTask = SendThumbnailLoopAsync(ct);
-                                await Task.WhenAny(receiveTask, thumbnailTask);
+                                var heartbeatTask = HeartbeatLoopAsync(ct);
+
+                                await Task.WhenAny(receiveTask, thumbnailTask, heartbeatTask);
                                 continue;
                             }
                         }
@@ -78,34 +82,35 @@ namespace EduLab.Client.Services
                         }
                     }
 
-                    // 2. Tự động dò tìm IP máy giáo viên qua UDP Broadcast
+                    // 2. Dò tìm tự động máy chủ giáo viên qua UDP Broadcast
                     OnStatusChanged?.Invoke("Đang dò tìm Máy Giáo Viên trên Wi-Fi...");
                     var discovery = await DiscoveryBeacon.DiscoverServerAsync(3000, ct);
                     if (discovery == null)
                     {
-                        OnStatusChanged?.Invoke("Chưa tìm thấy Máy Giáo Viên (Bấm 'Cài đặt IP' để nhập thủ công)");
+                        OnStatusChanged?.Invoke("Chưa tìm thấy Máy GV (Bấm 'Cài đặt IP' nếu dùng Wi-Fi chặn Broadcast)");
                         await Task.Delay(3000, ct);
                         continue;
                     }
 
                     ServerIp = discovery.ServerIp;
-                    OnStatusChanged?.Invoke($"Đã tìm thấy máy chủ ({ServerIp}). Đang kết nối...");
+                    OnStatusChanged?.Invoke($"Đã thấy máy chủ ({ServerIp}). Đang kết nối...");
 
                     // 3. Kết nối TCP tới máy giáo viên
                     _tcpClient = new TcpClient();
                     await _tcpClient.ConnectAsync(ServerIp, discovery.CommandPort, ct);
                     _stream = _tcpClient.GetStream();
 
-                    OnStatusChanged?.Invoke($"Đã kết nối tới Máy Giáo Viên ({ServerIp})!");
+                    OnStatusChanged?.Invoke($"Đã kết nối Máy Giáo Viên ({ServerIp})");
 
-                    // 4. Đăng ký thông tin máy trạm với máy chủ
+                    // 4. Gửi đăng ký định danh máy trạm
                     await RegisterWithServerAsync(ct);
 
-                    // 5. Khởi động 2 luồng: Lắng nghe lệnh từ thầy & Định kỳ gửi Thumbnail
+                    // 5. Chạy các tiến trình song song: Nhận lệnh, Gửi Thumbnail, Heartbeat
                     var recTask = ReceiveCommandsLoopAsync(ct);
                     var thumbTask = SendThumbnailLoopAsync(ct);
+                    var hbTask = HeartbeatLoopAsync(ct);
 
-                    await Task.WhenAny(recTask, thumbTask);
+                    await Task.WhenAny(recTask, thumbTask, hbTask);
                 }
                 catch (OperationCanceledException)
                 {
@@ -130,12 +135,12 @@ namespace EduLab.Client.Services
             {
                 string configPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "server_ip.txt");
                 File.WriteAllText(configPath, ip.Trim());
-                CloseConnection(); // Buộc kết nối lại với IP mới
+                CloseConnection();
             }
             catch { }
         }
 
-        private string GetConfiguredServerIp()
+        public string GetConfiguredServerIp()
         {
             try
             {
@@ -165,7 +170,24 @@ namespace EduLab.Client.Services
             };
 
             var packet = NetworkPacket.FromObject(CommandType.RegisterClient, clientInfo);
-            await PacketFraming.SendPacketAsync(_stream, packet, ct);
+            await SendPacketSafeAsync(packet, ct);
+        }
+
+        private async Task HeartbeatLoopAsync(CancellationToken ct)
+        {
+            while (!ct.IsCancellationRequested && _stream != null)
+            {
+                await Task.Delay(10000, ct);
+                try
+                {
+                    var ping = new NetworkPacket(CommandType.Ping, Array.Empty<byte>());
+                    await SendPacketSafeAsync(ping, ct);
+                }
+                catch
+                {
+                    break;
+                }
+            }
         }
 
         private async Task ReceiveCommandsLoopAsync(CancellationToken ct)
@@ -252,7 +274,7 @@ namespace EduLab.Client.Services
             while (!ct.IsCancellationRequested && _stream != null)
             {
                 await SendSingleThumbnailAsync(ct);
-                // Giới hạn 1 khung hình mỗi 2 giây để siêu tiết kiệm băng thông Wi-Fi
+                // Giới hạn 2 giây một ảnh để mượt và siêu nhẹ băng thông Wi-Fi
                 await Task.Delay(2000, ct);
             }
         }
@@ -266,13 +288,10 @@ namespace EduLab.Client.Services
                 if (thumb.Length > 0)
                 {
                     var packet = new NetworkPacket(CommandType.ThumbnailData, thumb);
-                    await PacketFraming.SendPacketAsync(_stream, packet, ct);
+                    await SendPacketSafeAsync(packet, ct);
                 }
             }
-            catch
-            {
-                // Bỏ qua lỗi chụp màn hình nhất thời
-            }
+            catch { }
         }
 
         public async Task SubmitFileAsync(string filePath, string studentName, string studentId, string className)
@@ -290,11 +309,9 @@ namespace EduLab.Client.Services
                 ClassName = className
             };
 
-            // 1. Gửi gói tin thông tin file
             var startPacket = NetworkPacket.FromObject(CommandType.SubmitFileStart, meta);
-            await PacketFraming.SendPacketAsync(_stream, startPacket);
+            await SendPacketSafeAsync(startPacket);
 
-            // 2. Chia nhỏ và gửi từng chunk (64KB mỗi chunk)
             using var fs = File.OpenRead(filePath);
             byte[] buffer = new byte[64 * 1024];
             int totalChunks = (int)Math.Ceiling((double)fileInfo.Length / buffer.Length);
@@ -315,7 +332,7 @@ namespace EduLab.Client.Services
                 };
 
                 var p = NetworkPacket.FromObject(CommandType.SubmitFileChunk, chunkPacket);
-                await PacketFraming.SendPacketAsync(_stream, p);
+                await SendPacketSafeAsync(p);
             }
         }
 
@@ -323,7 +340,7 @@ namespace EduLab.Client.Services
         {
             if (_stream == null || _tcpClient == null || !_tcpClient.Connected)
             {
-                throw new InvalidOperationException("Máy trạm CHƯA KẾT NỐI tới Máy Giáo Viên! Vui lòng kiểm tra sóng Wi-Fi hoặc bấm '⚙️ Cài đặt IP' để nhập IP máy giáo viên.");
+                throw new InvalidOperationException("Máy trạm CHƯA KẾT NỐI tới Máy Giáo Viên!\nVui lòng bấm '⚙️ Cài đặt IP' ở góc dưới màn hình để nhập IP máy giáo viên.");
             }
 
             var info = new ClientInfo
@@ -331,10 +348,27 @@ namespace EduLab.Client.Services
                 MachineName = MachineName,
                 StudentName = studentName,
                 StudentId = studentId,
-                ClassName = className
+                ClassName = className,
+                IpAddress = GetLocalIpAddress(),
+                Status = ClientStatus.Locked
             };
+
             var packet = NetworkPacket.FromObject(CommandType.StudentCheckIn, info);
-            await PacketFraming.SendPacketAsync(_stream, packet);
+            await SendPacketSafeAsync(packet);
+        }
+
+        private async Task SendPacketSafeAsync(NetworkPacket packet, CancellationToken ct = default)
+        {
+            if (_stream == null) return;
+            await _sendLock.WaitAsync(ct).ConfigureAwait(false);
+            try
+            {
+                await PacketFraming.SendPacketAsync(_stream, packet, ct).ConfigureAwait(false);
+            }
+            finally
+            {
+                _sendLock.Release();
+            }
         }
 
         private void CloseConnection()

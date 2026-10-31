@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using EduLab.Server.Services;
 using EduLab.Server.ViewModels;
 using Microsoft.Win32;
@@ -25,21 +26,29 @@ namespace EduLab.Server.Views
             Closed += (s, e) => ServerNetworkManager.Instance.Stop();
         }
 
+        // ================= XỬ LÝ BỘ LỌC HIỂN THỊ =================
+        private void FilterAll_Click(object sender, RoutedEventArgs e) => _vm.SelectedFilter = "ALL";
+        private void FilterOnline_Click(object sender, RoutedEventArgs e) => _vm.SelectedFilter = "ONLINE";
+        private void FilterInUse_Click(object sender, RoutedEventArgs e) => _vm.SelectedFilter = "INUSE";
+        private void FilterLocked_Click(object sender, RoutedEventArgs e) => _vm.SelectedFilter = "LOCKED";
+        private void FilterOffline_Click(object sender, RoutedEventArgs e) => _vm.SelectedFilter = "OFFLINE";
+
+        // ================= CÁC THAO TÁC TOÀN PHÒNG =================
         private async void BtnLockAll_Click(object sender, RoutedEventArgs e)
         {
             await ServerNetworkManager.Instance.LockAllAsync();
-            foreach (var m in _vm.Machines)
+            foreach (var m in _vm.AllMachines)
             {
                 if (m.IsOnline) m.Status = Shared.Enums.ClientStatus.Locked;
             }
             _vm.UpdateCounters();
-            _vm.StatusNotification = "Đã gửi lệnh khóa toàn bộ phòng máy.";
+            _vm.StatusNotification = "Đã gửi lệnh khóa toàn bộ 40 máy.";
         }
 
         private async void BtnUnlockAll_Click(object sender, RoutedEventArgs e)
         {
             await ServerNetworkManager.Instance.UnlockAllAsync();
-            foreach (var m in _vm.Machines)
+            foreach (var m in _vm.AllMachines)
             {
                 if (m.IsOnline) m.Status = Shared.Enums.ClientStatus.InUse;
             }
@@ -52,7 +61,7 @@ namespace EduLab.Server.Views
             var dlg = new OpenFileDialog
             {
                 Title = "Chọn đề bài / tài liệu phát cho học sinh",
-                Filter = "Tất cả các tệp (*.*)|*.*|Tài liệu (*.docx;*.pdf;*.pptx)|*.docx;*.pdf;*.pptx"
+                Filter = "Tất cả các tệp (*.*)|*.*|Tài liệu (*.docx;*.pdf;*.pptx;*.xlsx)|*.docx;*.pdf;*.pptx;*.xlsx"
             };
 
             if (dlg.ShowDialog() == true)
@@ -109,7 +118,7 @@ namespace EduLab.Server.Views
 
         private async void BtnShutdownAll_Click(object sender, RoutedEventArgs e)
         {
-            var res = MessageBox.Show("Thầy có chắc chắn muốn TẮT NGUỒN toàn bộ 40 máy không?", "Xác nhận tắt máy", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+            var res = MessageBox.Show("Thầy có chắc chắn muốn TẮT NGUỒN toàn bộ các máy trạm không?", "Xác nhận tắt máy", MessageBoxButton.YesNo, MessageBoxImage.Warning);
             if (res == MessageBoxResult.Yes)
             {
                 await ServerNetworkManager.Instance.ShutdownAllAsync();
@@ -127,11 +136,66 @@ namespace EduLab.Server.Views
             }
         }
 
+        // ================= CÁC THAO TÁC TRÊN TỪNG MÁY RIÊNG LẺ =================
+        private void MachineCard_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            if (e.ClickCount == 2 && sender is FrameworkElement el && el.DataContext is ClientItemViewModel client)
+            {
+                // Nhấp đúp mở cửa sổ xem màn hình chi tiết
+                var zoomWin = new Window
+                {
+                    Title = $"Xem màn hình: {client.DisplayName} - {client.StudentDisplayInfo}",
+                    Width = 1050,
+                    Height = 680,
+                    WindowStartupLocation = WindowStartupLocation.CenterScreen,
+                    Background = System.Windows.Media.Brushes.Black,
+                    Content = new System.Windows.Controls.Image
+                    {
+                        Source = client.ThumbnailSource,
+                        Stretch = System.Windows.Media.Stretch.Uniform
+                    }
+                };
+                zoomWin.ShowDialog();
+            }
+        }
+
+        private async void BtnQuickToggleLock_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is Button btn && btn.DataContext is ClientItemViewModel client)
+            {
+                if (client.IsLocked)
+                {
+                    await ServerNetworkManager.Instance.UnlockMachineAsync(client.MachineName);
+                    client.Status = Shared.Enums.ClientStatus.InUse;
+                }
+                else
+                {
+                    await ServerNetworkManager.Instance.LockMachineAsync(client.MachineName);
+                    client.Status = Shared.Enums.ClientStatus.Locked;
+                }
+                _vm.UpdateCounters();
+            }
+        }
+
+        private async void BtnQuickShutdown_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is Button btn && btn.DataContext is ClientItemViewModel client)
+            {
+                var res = MessageBox.Show($"Thầy có chắc chắn muốn TẮT NGUỒN {client.DisplayName}?", "Xác nhận tắt máy", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+                if (res == MessageBoxResult.Yes)
+                {
+                    await ServerNetworkManager.Instance.ShutdownMachineAsync(client.MachineName);
+                    _vm.StatusNotification = $"Đã gửi lệnh tắt {client.DisplayName}";
+                }
+            }
+        }
+
         private async void MenuLockSingle_Click(object sender, RoutedEventArgs e)
         {
             if (sender is MenuItem item && item.DataContext is ClientItemViewModel client)
             {
                 await ServerNetworkManager.Instance.LockMachineAsync(client.MachineName);
+                client.Status = Shared.Enums.ClientStatus.Locked;
                 _vm.UpdateCounters();
             }
         }
@@ -141,6 +205,7 @@ namespace EduLab.Server.Views
             if (sender is MenuItem item && item.DataContext is ClientItemViewModel client)
             {
                 await ServerNetworkManager.Instance.UnlockMachineAsync(client.MachineName);
+                client.Status = Shared.Enums.ClientStatus.InUse;
                 _vm.UpdateCounters();
             }
         }
